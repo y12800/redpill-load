@@ -1,0 +1,8 @@
+{
+  "model": "SA6400",
+  "version": "7.2.2-72806",
+  "extra_cmdline": "SataPortMap=4",
+  "extensions": ["r8125","igc"],
+  "sn": "",
+  "mac1": ""
+}
