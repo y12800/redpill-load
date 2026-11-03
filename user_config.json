@@ -1,6 +1,7 @@
 {
   "model": "SA6400",
   "version": "7.2.2-72806",
+  "redpill_lkm_make_target": "dev-v7",
   "extra_cmdline": "SataPortMap=4",
   "extensions": ["r8125","igc"],
   "sn": "",
