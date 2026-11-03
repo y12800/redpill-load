@@ -6,40 +6,40 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu‑latest
+    runs-on: ubuntu-latest
     steps:
       - name: Install system dependencies
         run: |
-          sudo apt‑get update
-          sudo apt‑get install ‑y git jq dosfstools mtools grub‑pc‑bin bsdiff build‑essential bc cpio unzip
+          sudo apt-get update
+          sudo apt-get install -y git jq dosfstools mtools grub-pc-bin bsdiff build-essential bc cpio unzip
 
       - name: Checkout user config
         uses: actions/checkout@v4
 
       - name: Clone redpill‑load & checkout old commit (before block‑device rewrite)
         run: |
-          git clone https://github.com/PeterSuh‑Q3/redpill‑load.git
-          cd redpill‑load
+          git clone https://github.com/PeterSuh-Q3/redpill-load.git
+          cd redpill-load
           # 选用脚本还支持输出独立img、尚未改成写宿主机磁盘的快照
           git checkout bf1df2a923376796ec1a8429d6aa6ecc927525db
-          git log ‑‑oneline ‑1
+          git log --oneline -1
 
       - name: Debug show apollolake recipes
-        working‑directory: ./redpill‑load
-        run: ls ‑la config/apollolake
+        working-directory: ./redpill-load
+        run: ls -la config/apollolake
 
       - name: Clone matching redpill‑lkm
-        run: git clone https://github.com/PeterSuh‑Q3/redpill‑lkm.git redpill‑load/redpill‑lkm
+        run: git clone https://github.com/PeterSuh-Q3/redpill-lkm.git redpill-load/redpill-lkm
 
       - name: Copy user_config.json
-        run: cp user_config.json redpill‑load/user_config.json
+        run: cp user_config.json redpill-load/user_config.json
 
       - name: Build loader (old‑style arguments 2‑3 args, output standalone img file)
-        working‑directory: ./redpill‑load
-        run: ./build‑loader.sh "apollolake" "7.2.2‑72806" "redpill‑SA6400_7.2.2.img"
+        working-directory: ./redpill-load
+        run: ./build-loader.sh "apollolake" "7.2.2-72806" "redpill-SA6400_7.2.2.img"
 
       - name: Upload built image
-        uses: actions/upload‑artifact@v4
+        uses: actions/upload-artifact@v4
         with:
-          name: redpill‑SA6400‑72806
-          path: redpill‑load/redpill‑SA6400_7.2.2.img
+          name: redpill-SA6400-72806
+          path: redpill-load/redpill-SA6400_7.2.2.img
