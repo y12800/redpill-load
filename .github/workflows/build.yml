@@ -1,4 +1,4 @@
-name: Build Redpill Loader SA6400 7.2.2
+name: Build Redpill SA6400 apollolake‑7.2.2‑72806
 on:
   push:
     branches: [ main ]
@@ -13,20 +13,35 @@ jobs:
           sudo apt install -y git jq dosfstools mtools grub-pc-bin bsdiff build-essential bc cpio unzip
       - name: Checkout config
         uses: actions/checkout@v4
-      - name: Clone redpill-load (master-legacy-2026-09-13)
-        run: git clone -b master-legacy-2026-09-13 https://github.com/PeterSuh-Q3/redpill-load.git
-      - name: Clone matching redpill-lkm
-        run: git clone https://github.com/PeterSuh-Q3/redpill-lkm.git redpill-load/redpill-lkm
-      - name: List recipes to verify apollolake 72806
+
+      - name: Clone redpill‑load and switch master‑legacy‑2026‑09‑13 with check
+        run: |
+          git clone https://github.com/PeterSuh-Q3/redpill-load.git
+          cd redpill-load
+          git checkout master-legacy-2026-09-13
+          CUR_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [[ "${CUR_BRANCH}" != "master-legacy-2026-09-13" ]];then
+            echo "ERROR: branch switch failed, current: ${CUR_BRANCH}"
+            exit 1
+          fi
+          git log --oneline -1
+
+      - name: Debug list apollolake versions
         working-directory: ./redpill-load
         run: ls -la config/apollolake
+
+      - name: Clone redpill‑lkm
+        run: git clone https://github.com/PeterSuh-Q3/redpill-lkm.git redpill-load/redpill-lkm
+
       - name: Copy user_config.json
         run: cp user_config.json redpill-load/user_config.json
+
       - name: Build loader
         working-directory: ./redpill-load
         run: ./build-loader.sh "apollolake" "7.2.2-72806" "redpill-SA6400_7.2.2.img"
-      - name: Upload img
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: redpill-SA6400-72806
+          name: redpill‑SA6400‑72806
           path: redpill-load/redpill-SA6400_7.2.2.img
