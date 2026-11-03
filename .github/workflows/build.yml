@@ -21,7 +21,7 @@ jobs:
         run: cp user_config.json redpill-load/user_config.json
       - name: Build loader
         working-directory: ./redpill-load
-        run: ./build-loader.sh "SA6400" "7.2.2-72806" "redpill-SA6400_7.2.2.img"
+        run: ./build-loader.sh "apollolake" "7.2.2-72806" "redpill-SA6400_7.2.2.img"
       - name: Upload img
         uses: actions/upload-artifact@v4
         with:
