@@ -1,4 +1,4 @@
-name: Build Redpill Loader
+name: Build Redpill Loader SA6400 7.2.2
 on:
   push:
     branches: [ main ]
@@ -13,11 +13,14 @@ jobs:
           sudo apt install -y git jq dosfstools mtools grub-pc-bin bsdiff build-essential bc cpio unzip
       - name: Checkout config
         uses: actions/checkout@v4
-      - name: Clone redpill-load
-        run: git clone https://github.com/PeterSuh-Q3/redpill-load.git
-      - name: Clone redpill-lkm
+      - name: Clone redpill-load (master-legacy-2026-09-13)
+        run: git clone -b master-legacy-2026-09-13 https://github.com/PeterSuh-Q3/redpill-load.git
+      - name: Clone matching redpill-lkm
         run: git clone https://github.com/PeterSuh-Q3/redpill-lkm.git redpill-load/redpill-lkm
-      - name: Copy user config
+      - name: List recipes to verify apollolake 72806
+        working-directory: ./redpill-load
+        run: ls -la config/apollolake
+      - name: Copy user_config.json
         run: cp user_config.json redpill-load/user_config.json
       - name: Build loader
         working-directory: ./redpill-load
@@ -25,5 +28,5 @@ jobs:
       - name: Upload img
         uses: actions/upload-artifact@v4
         with:
-          name: redpill-loader
+          name: redpill-SA6400-72806
           path: redpill-load/redpill-SA6400_7.2.2.img
