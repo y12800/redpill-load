@@ -10,7 +10,7 @@ jobs:
       - name: Install deps
         run: |
           sudo apt update
-          sudo apt install -y git jq dosfstools mtools grub-pc-bin
+          sudo apt install -y git jq dosfstools mtools grub-pc-bin bsdiff build-essential bc cpio unzip
       - name: Checkout config
         uses: actions/checkout@v4
       - name: Clone redpill-load
