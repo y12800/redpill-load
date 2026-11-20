@@ -58,18 +58,22 @@ else
     FRKRNL="NO"
 fi
 
-BIOS_CNT="$(sudo fdisk -l | grep "BIOS" | wc -l )"
-[ $BIOS_CNT -eq 0 ] && BIOS_CNT="$(sudo fdisk -l | grep "EFI" | grep "127M" | wc -l )"
-[ $BIOS_CNT -eq 0 ] && BIOS_CNT="$(sudo fdisk -l | grep "*" | grep "83" | grep "127M" | wc -l )"
-
-if [ "$FRKRNL" = "NO" ]; then
-    getloaderdisk
+# CI image builds use a private image file and loop devices; never probe or write host disks.
+if [ "${BRP_CI_IMAGE:-0}" = "1" ]; then
+    BIOS_CNT=0
+    BRP_LOADER_DISK="ci-image"
 else
-    BRP_LOADER_DISK="$(cat /tmp/loaderdisk)"
-fi
-
-[ -z "${BRP_LOADER_DISK}" ] && exit 1
-getBus "${BRP_LOADER_DISK}" 
+    BIOS_CNT="$(sudo fdisk -l | grep "BIOS" | wc -l )"
+    [ $BIOS_CNT -eq 0 ] && BIOS_CNT="$(sudo fdisk -l | grep "EFI" | grep "127M" | wc -l )"
+    [ $BIOS_CNT -eq 0 ] && BIOS_CNT="$(sudo fdisk -l | grep "*" | grep "83" | grep "127M" | wc -l )"
+    if [ "$FRKRNL" = "NO" ]; then
+        getloaderdisk
+    else
+        BRP_LOADER_DISK="$(cat /tmp/loaderdisk)"
+    fi
+    [ -z "${BRP_LOADER_DISK}" ] && exit 1
+    getBus "${BRP_LOADER_DISK}"
+fi 
 
 BRP_USER_CFG=${BRP_USER_CFG:-"$PWD/user_config.json"}
 BRP_BUILD_DIR=${BRP_BUILD_DIR:-''} # makes sure attempts are unique; do not override this unless you're using repack
@@ -704,24 +708,24 @@ brp_generate_grub_conf "${BRP_REL_CONFIG_JSON}" "${BRP_USER_CFG}" BRP_RELEASE_PA
 pr_process_ok
 
 ##### CREATE FINAL LOADER IMAGE ########################################################################################
-#pr_process "Creating loader image at %s" "${BRP_OUTPUT_FILE}"
-#brp_unpack_single_gz "${BRP_BOOT_IMAGE}" "${BRP_OUTPUT_FILE}"
-#readonly BRP_OUT_P1="$(brp_mount_img_partitions "${BRP_OUTPUT_FILE}" 1 "${BRP_BUILD_DIR}/img-mnt")" # partition 1 of img
-#readonly BRP_OUT_P2="$(brp_mount_img_partitions "${BRP_OUTPUT_FILE}" 2 "${BRP_BUILD_DIR}/img-mnt")" # partition 2 of img
+if [ "${BRP_CI_IMAGE:-0}" = "1" ]; then
+  pr_process "Creating isolated loader image at %s" "${BRP_OUTPUT_FILE}"
+  brp_mkdir "$(dirname "${BRP_OUTPUT_FILE}")"
+  brp_unpack_single_gz "${BRP_BOOT_IMAGE}" "${BRP_OUTPUT_FILE}"
+  readonly BRP_OUT_P1="$(brp_mount_img_partitions "${BRP_OUTPUT_FILE}" 1 "${BRP_BUILD_DIR}/img-mnt")"
+  readonly BRP_OUT_P2="$(brp_mount_img_partitions "${BRP_OUTPUT_FILE}" 2 "${BRP_BUILD_DIR}/img-mnt")"
+  readonly BRP_OUT_P3="$(brp_mount_img_partitions "${BRP_OUTPUT_FILE}" 3 "${BRP_BUILD_DIR}/img-mnt")"
+else
+  readonly BRP_OUT_P1="/mnt/${BRP_LOADER_DISK}1"
+  readonly BRP_OUT_P2="/mnt/${BRP_LOADER_DISK}2"
+  readonly BRP_OUT_P3="/mnt/${BRP_LOADER_DISK}3"
+fi
+readonly BRP_ZLINMOD_NAME="zImage"
+readonly BRP_RDMOD_NAME="rd.gz"
 
-# Add patched zImage, patched ramdisk and our GRUB config for new mshell (dont make loader.img 2023.10.26)
-readonly BRP_OUT_P1="/mnt/${BRP_LOADER_DISK}1" 
-readonly BRP_OUT_P2="/mnt/${BRP_LOADER_DISK}2" 
-readonly BRP_OUT_P3="/mnt/${BRP_LOADER_DISK}3" 
-readonly BRP_ZLINMOD_NAME="zImage" # name of the linux kernel in the final image
-readonly BRP_RDMOD_NAME="rd.gz" # name of the ramdisk in the final image
-
-# Copy any config-specified extra files
 pr_process "Copying extra files"
 brp_cp_from_list "${BRP_REL_CONFIG_JSON}" "extra.bootp1_copy" BRP_RELEASE_PATHS "${BRP_OUT_P1}"
 brp_cp_from_list "${BRP_REL_CONFIG_JSON}" "extra.bootp2_copy" BRP_RELEASE_PATHS "${BRP_OUT_P2}"
-
-# Copy user files to boot partitions
 if [[ "$(brp_json_has_field "${BRP_USER_CFG}" 'bootp1_copy')" -eq 1 ]]; then
   brp_cp_from_list "${BRP_USER_CFG}" "bootp1_copy" BRP_RELEASE_PATHS "${BRP_OUT_P1}"
 fi
@@ -730,35 +734,41 @@ if [[ "$(brp_json_has_field "${BRP_USER_CFG}" 'bootp2_copy')" -eq 1 ]]; then
 fi
 pr_process_ok
 
-# Add patched zImage, patched ramdisk and our GRUB config
 pr_process "Copying patched files"
 brp_cp_flat "${BRP_ZLINUX_PATCHED_FILE}" "${BRP_OUT_P1}/${BRP_ZLINMOD_NAME}"
-if [[ $BIOS_CNT -eq 1 ]] && [ "$FRKRNL" = "YES" ]; then
+if [ "${BRP_CI_IMAGE:-0}" = "1" ]; then
+  brp_cp_flat "${BRP_RD_REPACK}" "${BRP_OUT_P3}/${BRP_RDMOD_NAME}"
+  brp_cp_flat "${BRP_CUSTOM_RD_PATH}" "${BRP_OUT_P3}/${BRP_CUSTOM_RD_NAME}"
+else
+  if [[ $BIOS_CNT -eq 1 ]] && [ "$FRKRNL" = "YES" ]; then
     brp_cp_flat "${BRP_RD_REPACK}" "/dev/shm/${BRP_RDMOD_NAME}"
     brp_cp_flat "${BRP_CUSTOM_RD_PATH}" "/dev/shm/${BRP_CUSTOM_RD_NAME}"
-else
-#brp_cp_flat "${BRP_RD_REPACK}" "${BRP_OUT_P1}/${BRP_RDMOD_NAME}"
+  else
     brp_cp_flat "${BRP_RD_REPACK}" "${BRP_OUT_P3}/${BRP_RDMOD_NAME}"
-#brp_cp_flat "${BRP_CUSTOM_RD_PATH}" "${BRP_OUT_P1}/${BRP_CUSTOM_RD_NAME}"
     brp_cp_flat "${BRP_CUSTOM_RD_PATH}" "${BRP_OUT_P3}/${BRP_CUSTOM_RD_NAME}"
-fi    
-#brp_cp_flat "${BRP_TMP_GRUB_CONF}" "${BRP_OUT_P1}/boot/grub/grub.cfg"
-brp_cp_flat "${BRP_TMP_GRUB_CONF}" "/tmp/grub.cfg"
+  fi
+fi
+# GRUB's configuration belongs on the first (EFI/boot) partition.
+if [ -d "${BRP_OUT_P1}/boot/grub" ]; then
+  brp_cp_flat "${BRP_TMP_GRUB_CONF}" "${BRP_OUT_P1}/boot/grub/grub.cfg"
+elif [ -d "${BRP_OUT_P1}/grub" ]; then
+  brp_cp_flat "${BRP_TMP_GRUB_CONF}" "${BRP_OUT_P1}/grub/grub.cfg"
+else
+  pr_crit "Cannot locate GRUB configuration directory on loader partition 1"
+fi
 pr_process_ok
 
 ##### CLEANUP ##########################################################################################################
 pr_process "Cleaning up"
-#brp_detach_image "${BRP_OUTPUT_FILE}"
+if [ "${BRP_CI_IMAGE:-0}" = "1" ]; then
+  brp_detach_image "${BRP_OUTPUT_FILE}"
+fi
 if [ "${BRP_KEEP_BUILD}" -eq 0 ]; then
   if [ "$FRKRNL" = "NO" ]; then
-    "${RM_PATH}" -rf "${BRP_BUILD_DIR}"
+    "${RM_PATH}" -rf "${BRP_BUILD_DIR}" || pr_warn "Failed to remove build directory"
   else
-    sudo "${RM_PATH}" -rf "${BRP_BUILD_DIR}"
+    sudo "${RM_PATH}" -rf "${BRP_BUILD_DIR}" || pr_warn "Failed to remove build directory"
   fi
 fi
 pr_process_ok
-pr_process "Path of loader disk %s" "${BRP_OUT_P3}"
-#ls -l "${BRP_OUT_P1}"
-#ls -l "${BRP_OUT_P2}"
-#ls -l "${BRP_OUT_P3}"
-pr_process_ok
+pr_info "Loader image created: %s" "${BRP_OUTPUT_FILE}"
