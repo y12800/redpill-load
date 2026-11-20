@@ -1,0 +1,69 @@
+name: Build DVA3221 DSM 7.2.2-72806 IMG
+
+on:
+  push:
+    branches:
+      - build/dva3221-7.2.2-72806-img
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dva3221-72806-img
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential cpio curl device-tree-compiler dosfstools \
+            e2fsprogs flex gdisk git gzip jq kmod libelf-dev libssl-dev \
+            lz4 lzop make patch python3 rsync squashfs-tools util-linux \
+            wget xz-utils zstd
+
+      - name: Validate DVA3221 build inputs
+        run: |
+          test -s config/DVA3221/7.2.2-72806/config.json
+          test -s ext/boot-image-template.img.gz
+          test -s ext/rp-lkm/redpill-linux-v4.4.302+.ko
+          echo "PAT SHA256 configured:"
+          jq -r '.os.sha256' config/DVA3221/7.2.2-72806/config.json
+
+      - name: Create blank user configuration
+        run: |
+          cat > user_config.json <<'JSON'
+          {
+            "extra_cmdline": {}
+          }
+          JSON
+
+      - name: Build loader IMG
+        env:
+          BRP_CI_IMAGE: "1"
+          BRP_USER_CFG: user_config.json
+          BRP_KEEP_BUILD: "0"
+        run: |
+          mkdir -p images
+          sudo -E env BRP_CI_IMAGE="$BRP_CI_IMAGE" BRP_USER_CFG="$BRP_USER_CFG" BRP_KEEP_BUILD="$BRP_KEEP_BUILD" \
+            bash ./build-loader.sh DVA3221 7.2.2-72806 images/redpill-DVA3221_7.2.2-72806.img DVA3221 4.4.302 DVA3221
+          test -s images/redpill-DVA3221_7.2.2-72806.img
+          sha256sum images/redpill-DVA3221_7.2.2-72806.img
+
+      - name: Upload loader IMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: redpill-DVA3221-7.2.2-72806-img
+          path: images/redpill-DVA3221_7.2.2-72806.img
+          if-no-files-found: error
+          retention-days: 14
